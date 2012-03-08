@@ -1,7 +1,7 @@
 /* vim: set sw=4 ts=4:
  * Author: Liu DongMiao <liudongmiao@gmail.com>
  * Created  : Thu 11 Aug 2011 08:19:15 PM CST
- * Modified : Fri 09 Mar 2012 03:34:16 AM CST
+ * Modified : Fri 09 Mar 2012 03:59:09 AM CST
  *
  * This program is free software. It comes without any warranty, to
  * the extent permitted by applicable law. You can redistribute it
@@ -15,7 +15,6 @@
 #include <errno.h>
 #include <unistd.h>
 #include <string.h>
-#include <stdlib.h>
 #include <ctype.h>
 #include <sys/stat.h>
 
