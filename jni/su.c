@@ -1,7 +1,7 @@
 /* vim: set sw=4 ts=4:
  * Author: Liu DongMiao <liudongmiao@gmail.com>
  * Created  : Thu 11 Aug 2011 08:19:15 PM CST
- * Modified : Sat 17 Mar 2012 01:14:26 AM CST
+ * Modified : Sat 17 Mar 2012 03:18:15 AM CST
  *
  * This program is free software. It comes without any warranty, to
  * the extent permitted by applicable law. You can redistribute it
@@ -52,12 +52,23 @@ static uid_t getterm()
 	return (uid_t) AID_ROOT;
 }
 
+static int hasc(int argc, char **argv)
+{
+	int i;
+	for (i = 1; i < argc; i++) {
+		if (!strcmp(argv[i], "-c")) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	uid_t uid;
 
 	// run-as always has suid, so this program can replace with run-as
-	if (argc > 1 && !strcmp(argv[0], "run-as") && strcmp(argv[1], "-c")) {
+	if (!strcmp(argv[0], "run-as") && !hasc(argc, argv)) {
 		execvp("runas", argv);
 		return -errno; 
 	}
@@ -68,7 +79,7 @@ int main(int argc, char **argv)
 		int i, flags = 0;
 		char filepath[32];
 		char cmdline[256];
-		char lineptr[256];
+		char lineptr[4096];
 		FILE *stream = NULL;;
 
 		// get the parent's name
@@ -98,17 +109,25 @@ int main(int argc, char **argv)
 
 		// log it for unknown request
 		if (!flags && (stream = fopen("/sdcard/su.log", "a")) != NULL) {
-			fprintf(stream, "===============================================\n");
+			fprintf(stream, "+++++++++++++++++++++++++++++++++++++++++++++++\n");
 			fprintf(stream, "--------------------command--------------------\n");
-			fprintf(stream, "cmdline=%s", cmdline);
+			fprintf(stream, "parent=%s\n", cmdline);
 			for (i = 0; i < argc; i++) {
-				fprintf(stream, ", argv[%d]=%s", i, argv[i]);
+				fprintf(stream, "argv[%d]=%s\n", i, argv[i]);
 			}
-			fprintf(stream, "\n");
-			fprintf(stream, "---------------------stdin---------------------\n");
-			while ((i = read(fileno(stdin), lineptr, sizeof(lineptr))) > 0) {
-				fwrite(lineptr, i, 1, stream);
+			fflush(stream);
+			// log it if there is no -c
+			if (!hasc(argc, argv)) {
+				fprintf(stream, "---------------------stdin---------------------\n");
+				while ((i = read(0, lineptr, sizeof(lineptr))) > 0) {
+					fwrite(lineptr, i, 1, stream);
+					fflush(stream);
+					if (i < sizeof(lineptr)) {
+						break;
+					}
+				}
 			}
+			fprintf(stream, "===============================================\n\n");
 			fclose(stream);
 		}
 
@@ -123,8 +142,12 @@ int main(int argc, char **argv)
 		return -EPERM;
 	}
 
-	if (argc == 3 && !strcmp(argv[1], "-c")) {
-		execlp("sh", "sh", "-c", argv[2], NULL);
+	if (hasc(argc, argv)) {
+		strcpy(argv[0], "sh");
+		execvp("sh", argv);
+	} else if (uid != AID_ROOT && !isatty(0)) {
+		fprintf(stderr, "standard in must be a tty\n");
+		return -EPERM;
 	} else {
 		execlp("sh", "sh", NULL);
 	}
