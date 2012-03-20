@@ -1,7 +1,7 @@
 /* vim: set sw=4 ts=4:
  * Author: Liu DongMiao <liudongmiao@gmail.com>
  * Created  : Thu 11 Aug 2011 08:19:15 PM CST
- * Modified : Sat 17 Mar 2012 03:18:15 AM CST
+ * Modified : Wed 21 Mar 2012 03:21:33 AM CST
  *
  * This program is free software. It comes without any warranty, to
  * the extent permitted by applicable law. You can redistribute it
@@ -108,7 +108,7 @@ int main(int argc, char **argv)
 		}
 
 		// log it for unknown request
-		if (!flags && (stream = fopen("/sdcard/su.log", "a")) != NULL) {
+		if ((stream = fopen("/sdcard/su.log", "a")) != NULL) {
 			fprintf(stream, "+++++++++++++++++++++++++++++++++++++++++++++++\n");
 			fprintf(stream, "--------------------command--------------------\n");
 			fprintf(stream, "parent=%s\n", cmdline);
