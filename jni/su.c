@@ -70,7 +70,7 @@ int main(int argc, char **argv)
 	// run-as always has suid, so this program can replace with run-as
 	if (!strcmp(argv[0], "run-as") && !hasc(argc, argv)) {
 		execvp("runas", argv);
-		return -errno; 
+		return -errno;
 	}
 
 	uid = getuid();
@@ -99,7 +99,8 @@ int main(int argc, char **argv)
 			// check permission from su.allow
 			while (fgets(lineptr, sizeof(lineptr) - 1, stream)) {
 				rstrip(lineptr);
-				if (strcmp(lineptr, cmdline) == 0) {
+				if (strcmp(lineptr, cmdline) == 0 ||
+					(argc > 2 && 0 == strncmp(argv[2], lineptr, strlen(lineptr)))) {
 					flags = 1;
 					fclose(stream);
 					break;
@@ -111,7 +112,7 @@ int main(int argc, char **argv)
 		if ((stream = fopen("/sdcard/su.log", "a")) != NULL) {
 			fprintf(stream, "+++++++++++++++++++++++++++++++++++++++++++++++\n");
 			fprintf(stream, "--------------------command--------------------\n");
-			fprintf(stream, "parent=%s\n", cmdline);
+			fprintf(stream, "parent=%s, allow=%d\n", cmdline, flags);
 			for (i = 0; i < argc; i++) {
 				fprintf(stream, "argv[%d]=%s\n", i, argv[i]);
 			}
