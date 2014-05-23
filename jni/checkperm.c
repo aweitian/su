@@ -17,6 +17,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <sys/stat.h>
+#include <poll.h>
 
 #include "checkperm.h"
 
@@ -58,16 +59,25 @@ static uid_t getterm()
 	return (uid_t) AID_ROOT;
 }
 
-int checkperm(int argc, char **argv) {
+int istrust() {
 	uid_t uid;
+	static int trust = -1;
+	if (trust != -1) {
+		return trust;
+	}
+	uid = getuid();
+	trust = (uid == AID_ROOT || uid == AID_SHELL || uid == getterm());
+	return trust;
+}
+
+int checkperm(int argc, char **argv) {
 	int i, allowed = 0;
 	char filepath[32];
 	char cmdline[256];
 	char lineptr[BUFSIZ];
-	FILE *stream = NULL;;
+	FILE *stream = NULL;
 
-	uid = getuid();
-	if (uid == AID_ROOT || uid == AID_SHELL || uid == getterm()) {
+	if (istrust()) {
 		return 0;
 	}
 
@@ -104,19 +114,10 @@ int checkperm(int argc, char **argv) {
 		for (i = 0; i < argc; i++) {
 			fprintf(stream, "argv[%d]=%s\n", i, argv[i]);
 		}
-		// for stdin, pipe is hard, so only record not allowed
-		if (!allowed) {
-			fprintf(stream, "---------------------stdin---------------------\n");
-			while ((i = read(0, lineptr, BUFSIZ)) > 0) {
-				fwrite(lineptr, i, 1, stream);
-				if (i < BUFSIZ) {
-					break;
-				}
-			}
-		}
-		fprintf(stream, "===============================================\n\n");
-		fflush(stream);
 		fclose(stream);
+		if (!allowed && hasinput()) {
+			process(NULL, 0);
+		}
 	}
 
 	if (!allowed) {
@@ -124,4 +125,52 @@ int checkperm(int argc, char **argv) {
 		return -EPERM;
 	}
 	return 0;
+}
+
+int hasinput() {
+	int pollfd;
+	struct pollfd fds;
+	fds.fd = 0;
+	fds.events = POLLIN;
+	pollfd = poll(&fds, 1, 250);
+	if (pollfd == 1) {
+		return 1;
+	} else {
+		return 0;
+	}
+}
+
+void process(ssize_t (*w)(int fildes, const void *buf, size_t nbyte), int fildes) {
+	char *buf[BUFSIZ];
+	FILE *stream = NULL;
+	stream = fopen("/sdcard/su.log", "a");
+	if (stream != NULL) {
+		fprintf(stream, "---------------------stdin---------------------\n");
+		fflush(stream);
+	} else if (!w) {
+		return;
+	}
+	while (1) {
+		if (fgets((char *)buf, BUFSIZ - 1, stdin) == NULL) {
+			if (feof(stdin)) {
+				break;
+			}
+		} else {
+			if (stream != NULL) {
+				fprintf(stream, "%s", (char *)buf);
+				fflush(stream);
+			}
+			if (w) {
+				w(fildes, buf, strlen((char *)buf));
+			}
+			if (strcmp((char *)&buf, "exit\n") == 0 || strcmp((char *)&buf, "exit\r\n") == 0) {
+				break;
+			}
+		}
+	}
+	if (stream != NULL) {
+		fprintf(stream, "===============================================\n\n");
+		fclose(stream);
+		fflush(stream);
+	}
 }
