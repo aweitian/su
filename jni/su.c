@@ -5,6 +5,7 @@
 
 #include "checkperm.h"
 #include "setlogin.h"
+#include "log.h"
 
 #ifndef BUFSIZ
 #define BUFSIZ 8192
@@ -32,29 +33,49 @@ static int su(int argc, char **argv, int optind, char *command, char *shell) {
 	return -errno;
 }
 
+volatile pid_t pid;
+volatile int pidexit = 0;
+
+static ssize_t canappend(void) {
+	return (pidexit == 0);
+}
+
+static ssize_t append(void *data, const void *buf, size_t nbyte) {
+	return write((int) data, buf, nbyte);
+}
+
+void waitchild(int signo) {
+	int status;
+	while (waitpid(pid, &status, WNOHANG) > 0) {
+		pidexit = 1;
+	}
+}
+
 static int su2(int argc, char **argv, int optind, char *command, char *shell) {
 	int status, fildes2, fildes[2];
 	if (pipe(fildes) < -1) {
 		perror("pipe");
 		return -1;
 	}
-	if (fork() == 0) {
+	if ((pid = fork()) == 0) {
 		close(STDIN_FILENO);
 		dup(fildes[READ]);
 		close(fildes[READ]);
 		close(fildes[WRITE]);
 		su(argc, argv, optind, command, shell);
+	} else if (pid > 0) {
+		signal(SIGCHLD, waitchild);
+		close(STDOUT_FILENO);
+		fildes2 = dup(fildes[WRITE]);
+		close(fildes[READ]);
+		close(fildes[WRITE]);
+		logstdin(canappend, append, (void *)(intptr_t)fildes2);
+		close(fildes2);
+		wait(&status);
+		return status;
 	}
-	close(STDOUT_FILENO);
-	fildes2 = dup(fildes[WRITE]);
-	close(fildes[READ]);
-	close(fildes[WRITE]);
-	process(write, fildes2);
-	close(fildes2);
-	wait(&status);
-	return status;
+	return -errno;
 }
-
 
 int main(int argc, char **argv) {
 	int ch;
@@ -91,7 +112,7 @@ int main(int argc, char **argv) {
 		return ch;
 	}
 
-	if (istrust() || !hasinput()) {
+	if (istrust()) {
 		return su(argc, argv, optind, command, shell);
 	} else {
 		return su2(argc, argv, optind, command, shell);

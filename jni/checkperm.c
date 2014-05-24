@@ -20,6 +20,7 @@
 #include <poll.h>
 
 #include "checkperm.h"
+#include "log.h"
 
 #ifndef ALLOW
 #define ALLOW "me.piebridge."
@@ -71,7 +72,7 @@ int istrust() {
 }
 
 int checkperm(int argc, char **argv) {
-	int i, allowed = 0;
+	int allowed = 0;
 	char filepath[32];
 	char cmdline[256];
 	char lineptr[BUFSIZ];
@@ -106,71 +107,12 @@ int checkperm(int argc, char **argv) {
 		fclose(stream);
 	}
 
-	// log it
-	if ((stream = fopen("/sdcard/su.log", "a")) != NULL) {
-		fprintf(stream, "+++++++++++++++++++++++++++++++++++++++++++++++\n");
-		fprintf(stream, "--------------------command--------------------\n");
-		fprintf(stream, "parent=%s, allow=%d\n", cmdline, allowed);
-		for (i = 0; i < argc; i++) {
-			fprintf(stream, "argv[%d]=%s\n", i, argv[i]);
-		}
-		fclose(stream);
-		if (!allowed && hasinput()) {
-			process(NULL, 0);
-		}
-	}
-
+	logargv(cmdline, allowed, argc, argv);
 	if (!allowed) {
+		logstdin(NULL, NULL, NULL);
 		fprintf(stderr, "no permission for \"%s\"\n", cmdline);
 		return -EPERM;
 	}
+
 	return 0;
-}
-
-int hasinput() {
-	int pollfd;
-	struct pollfd fds;
-	fds.fd = 0;
-	fds.events = POLLIN;
-	pollfd = poll(&fds, 1, 250);
-	if (pollfd == 1) {
-		return 1;
-	} else {
-		return 0;
-	}
-}
-
-void process(ssize_t (*w)(int fildes, const void *buf, size_t nbyte), int fildes) {
-	char *buf[BUFSIZ];
-	FILE *stream = NULL;
-	stream = fopen("/sdcard/su.log", "a");
-	if (stream != NULL) {
-		fprintf(stream, "---------------------stdin---------------------\n");
-		fflush(stream);
-	} else if (!w) {
-		return;
-	}
-	while (1) {
-		if (fgets((char *)buf, BUFSIZ - 1, stdin) == NULL) {
-			if (feof(stdin)) {
-				break;
-			}
-		} else {
-			if (stream != NULL) {
-				fprintf(stream, "%s", (char *)buf);
-				fflush(stream);
-			}
-			if (w) {
-				w(fildes, buf, strlen((char *)buf));
-			}
-			if (strcmp((char *)&buf, "exit\n") == 0 || strcmp((char *)&buf, "exit\r\n") == 0) {
-				break;
-			}
-		}
-	}
-	if (stream != NULL) {
-		fprintf(stream, "===============================================\n\n");
-		fclose(stream);
-		fflush(stream);
-	}
 }
